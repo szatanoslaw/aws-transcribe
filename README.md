@@ -1,6 +1,6 @@
-# dynamodb_event_reader
+# aws-transcribe
 
-Sample SAM Template for dynamodb_event_reader to interact with DynamoDB Events.
+Simple AWS Template for an API transcribing mp3 and wav files and checking if provided sentences appear in it.
 
 ## Requirements
 
@@ -21,22 +21,6 @@ and convert your Lambda function source code into an artifact that can be deploy
 sam build
 ```
 
-### Local development
-
-Assuming you have already built your application, run the following to invoke your function locally:
-
-**Invoking function locally without API Gateway**
-
-```bash
-sam local generate-event dynamodb update | sam local invoke ReadDynamoDBEvent
-```
-
-You can also specify a `event.json` file with the payload you'd like to invoke your function with:
-
-```bash
-sam local invoke -e event.json ReadDynamoDBEvent
-```
-
 ## Deployment
 
 First and foremost, we need a S3 bucket where we can upload our Lambda functions packaged as ZIP before we deploy anything - If you don't have a S3 bucket to store code artifacts then this is a good time to create one:
@@ -48,7 +32,7 @@ aws s3 mb s3://BUCKET_NAME
 Now build your Lambda function
 
 ```bash
-sam build
+sam build --use-container
 ```
 
 Provided you have a S3 bucket created, run the following command to package our Lambda function to S3:
@@ -56,7 +40,7 @@ Provided you have a S3 bucket created, run the following command to package our 
 ```bash
 sam package \
     --output-template-file packaged.yaml \
-    --s3-bucket szatanoslaw-artifacts
+    --s3-bucket BUCKET_NAME
 ```
 
 Next, the following command will create a Cloudformation Stack and deploy your SAM resources.
@@ -66,28 +50,4 @@ sam deploy \
     --template-file packaged.yaml \
     --stack-name transcribeAudio \
     --capabilities CAPABILITY_IAM
-```
-
-> **See [Serverless Application Model (SAM) HOWTO Guide](https://github.com/awslabs/serverless-application-model/blob/master/HOWTO.md) for more details in how to get started.**
-
-# Appendix
-
-## AWS CLI commands
-
-AWS CLI commands to package, deploy and describe outputs defined within the cloudformation stack:
-
-```bash
-sam package \
-    --template-file template.yaml \
-    --output-template-file packaged.yaml \
-    --s3-bucket REPLACE_THIS_WITH_YOUR_S3_BUCKET_NAME
-
-sam deploy \
-    --template-file packaged.yaml \
-    --stack-name transcribeAudio \
-    --capabilities CAPABILITY_IAM \
-    --parameter-overrides MyParameterSample=MySampleValue
-
-aws cloudformation describe-stacks \
-    --stack-name transcribeAudio --query 'Stacks[].Outputs'
 ```
