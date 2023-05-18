@@ -1,0 +1,11 @@
+Resources:
+  Function:
+    Type: AWS::Serverless::Function
+    Properties:
+      Timeout: 300
+      MemorySize: 128
+      Handler: get_transcription.lambda_handler
+      CodeUri: /home/jakub/PycharmProjects/untitled/transcribe_audio_event
+      Runtime: python3.10
+      Architectures:
+        - x86_64

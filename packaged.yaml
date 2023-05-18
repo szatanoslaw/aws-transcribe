@@ -1,0 +1,333 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Globals:
+  Function:
+    Timeout: 30
+    Runtime: python3.10
+    Environment:
+      Variables:
+        REGION_NAME:
+          Fn::Sub: ${AWS::Region}
+        NLTK_DATA: ./nltk_data
+Resources:
+  RestApi:
+    Type: AWS::Serverless::Api
+    Properties:
+      Name: transcriptions-rest-API
+      StageName: Prod
+      Models:
+        TranscriptionPOST:
+          type: object
+          required:
+          - audio_url
+          - sentences
+          properties:
+            audio_url:
+              type: string
+            sentences:
+              type: array
+              items:
+                type: string
+              uniqueItems: true
+    Metadata:
+      SamResourceId: RestApi
+  TranscribeAudioFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: s3://szatanoslaw-artifacts/8eef1d9b5ad0932a3dfc134c7915c92a
+      Handler: create_transcription.lambda_handler
+      Role:
+        Fn::GetAtt:
+        - TranscribeAudioFunctionRole
+        - Arn
+      Events:
+        PostTranscriptionRequest:
+          Type: Api
+          Properties:
+            Path: /transcriptions/
+            Method: post
+            RestApiId:
+              Ref: RestApi
+            RequestModel:
+              Model: TranscriptionPOST
+              Required: true
+              ValidateBody: true
+    Metadata:
+      SamResourceId: TranscribeAudioFunction
+  DownloadAudioFile:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: s3://szatanoslaw-artifacts/8eef1d9b5ad0932a3dfc134c7915c92a
+      Handler: download_audio_file.lambda_handler
+      Role:
+        Fn::GetAtt:
+        - DownloadAudioFileRole
+        - Arn
+      Timeout: 600
+      Events:
+        TranscribeDownloadTriggerRule:
+          Type: CloudWatchEvent
+          Properties:
+            Pattern:
+              source:
+              - transcriptions.start-download
+              detail-type:
+              - DownloadTriggerEvent
+    Metadata:
+      SamResourceId: DownloadAudioFile
+  FinishTranscription:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: s3://szatanoslaw-artifacts/8eef1d9b5ad0932a3dfc134c7915c92a
+      Handler: finish_transcription.lambda_handler
+      Role:
+        Fn::GetAtt:
+        - FinishTranscriptionRole
+        - Arn
+      Timeout: 600
+      Events:
+        FinishTranscriptionEvent:
+          Type: CloudWatchEvent
+          Properties:
+            Pattern:
+              source:
+              - aws.transcribe
+              detail-type:
+              - Transcribe Job State Change
+              detail:
+                TranscriptionJobStatus:
+                - COMPLETED
+                - FAILED
+                - STOPPED
+    Metadata:
+      SamResourceId: FinishTranscription
+  GetTranscription:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: s3://szatanoslaw-artifacts/8eef1d9b5ad0932a3dfc134c7915c92a
+      Handler: get_transcription.lambda_handler
+      Role:
+        Fn::GetAtt:
+        - GetTranscriptionRole
+        - Arn
+      Events:
+        GetTranscriptionRequest:
+          Type: Api
+          Properties:
+            Path: /transcriptions/{transcription_id}/
+            Method: get
+            RestApiId:
+              Ref: RestApi
+    Metadata:
+      SamResourceId: GetTranscription
+  TranscribeAudioFunctionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: transcribe-audio-function-role
+      AssumeRolePolicyDocument:
+        Statement:
+        - Action:
+          - sts:AssumeRole
+          Effect: Allow
+          Principal:
+            Service:
+            - lambda.amazonaws.com
+      Policies:
+      - PolicyName: TranscribeDynamoDBAccess
+        PolicyDocument:
+          Version: '2012-10-17'
+          Statement:
+          - Effect: Allow
+            Action:
+            - dynamodb:PutItem
+            Resource:
+              Fn::GetAtt:
+              - TranscriptionsDBTable
+              - Arn
+      - PolicyName: EventBridgeAccess
+        PolicyDocument:
+          Version: '2012-10-17'
+          Statement:
+          - Effect: Allow
+            Action:
+            - events:PutEvents
+            Resource: '*'
+      - PolicyName: LogsAccess
+        PolicyDocument:
+          Version: '2012-10-17'
+          Statement:
+          - Effect: Allow
+            Action:
+            - logs:CreateLogGroup
+            - logs:CreateLogStream
+            - logs:PutLogEvents
+            Resource: '*'
+    Metadata:
+      SamResourceId: TranscribeAudioFunctionRole
+  DownloadAudioFileRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: download-audio-file-role
+      AssumeRolePolicyDocument:
+        Statement:
+        - Action:
+          - sts:AssumeRole
+          Effect: Allow
+          Principal:
+            Service:
+            - lambda.amazonaws.com
+        Version: '2012-10-17'
+      Policies:
+      - PolicyName: S3Access
+        PolicyDocument:
+          Version: '2012-10-17'
+          Statement:
+          - Effect: Allow
+            Action:
+            - s3:GetObject
+            - s3:PutObject
+            Resource:
+              Fn::Sub: arn:aws:s3:::${TranscriptionsBucket}/*
+      - PolicyName: TranscribeDynamoDBAccess
+        PolicyDocument:
+          Version: '2012-10-17'
+          Statement:
+          - Effect: Allow
+            Action:
+            - dynamodb:GetItem
+            - dynamodb:UpdateItem
+            Resource:
+              Fn::GetAtt:
+              - TranscriptionsDBTable
+              - Arn
+      - PolicyName: LogsAccess
+        PolicyDocument:
+          Version: '2012-10-17'
+          Statement:
+          - Effect: Allow
+            Action:
+            - logs:CreateLogGroup
+            - logs:CreateLogStream
+            - logs:PutLogEvents
+            Resource: '*'
+      - PolicyName: TranscribeStartTranscriptionAccess
+        PolicyDocument:
+          Version: '2012-10-17'
+          Statement:
+          - Effect: Allow
+            Action:
+            - transcribe:StartTranscriptionJob
+            Resource: '*'
+    Metadata:
+      SamResourceId: DownloadAudioFileRole
+  FinishTranscriptionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: finish-transcription-role
+      AssumeRolePolicyDocument:
+        Statement:
+        - Action:
+          - sts:AssumeRole
+          Effect: Allow
+          Principal:
+            Service:
+            - lambda.amazonaws.com
+        Version: '2012-10-17'
+      Policies:
+      - PolicyName: S3Access
+        PolicyDocument:
+          Version: '2012-10-17'
+          Statement:
+          - Effect: Allow
+            Action:
+            - s3:GetObject
+            Resource:
+              Fn::Sub: arn:aws:s3:::${TranscriptionsBucket}/*
+      - PolicyName: TranscribeDynamoDBAccess
+        PolicyDocument:
+          Version: '2012-10-17'
+          Statement:
+          - Effect: Allow
+            Action:
+            - dynamodb:GetItem
+            - dynamodb:UpdateItem
+            Resource:
+              Fn::GetAtt:
+              - TranscriptionsDBTable
+              - Arn
+      - PolicyName: LogsAccess
+        PolicyDocument:
+          Version: '2012-10-17'
+          Statement:
+          - Effect: Allow
+            Action:
+            - logs:CreateLogGroup
+            - logs:CreateLogStream
+            - logs:PutLogEvents
+            Resource: '*'
+      - PolicyName: TranscribeGetTranscriptionAccess
+        PolicyDocument:
+          Version: '2012-10-17'
+          Statement:
+          - Effect: Allow
+            Action:
+            - transcribe:GetTranscriptionJob
+            Resource: '*'
+    Metadata:
+      SamResourceId: FinishTranscriptionRole
+  GetTranscriptionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: get-transcription-role
+      AssumeRolePolicyDocument:
+        Statement:
+        - Action:
+          - sts:AssumeRole
+          Effect: Allow
+          Principal:
+            Service:
+            - lambda.amazonaws.com
+        Version: '2012-10-17'
+      Policies:
+      - PolicyName: TranscribeDynamoDBAccess
+        PolicyDocument:
+          Version: '2012-10-17'
+          Statement:
+          - Effect: Allow
+            Action:
+            - dynamodb:GetItem
+            Resource:
+              Fn::GetAtt:
+              - TranscriptionsDBTable
+              - Arn
+      - PolicyName: LogsAccess
+        PolicyDocument:
+          Version: '2012-10-17'
+          Statement:
+          - Effect: Allow
+            Action:
+            - logs:CreateLogGroup
+            - logs:CreateLogStream
+            - logs:PutLogEvents
+            Resource: '*'
+    Metadata:
+      SamResourceId: GetTranscriptionRole
+  TranscriptionsDBTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: transcriptions
+      AttributeDefinitions:
+      - AttributeName: request_id
+        AttributeType: S
+      KeySchema:
+      - AttributeName: request_id
+        KeyType: HASH
+      BillingMode: PAY_PER_REQUEST
+    Metadata:
+      SamResourceId: TranscriptionsDBTable
+  TranscriptionsBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: szatanoslaw-transcriptions-audio
+    Metadata:
+      SamResourceId: TranscriptionsBucket
