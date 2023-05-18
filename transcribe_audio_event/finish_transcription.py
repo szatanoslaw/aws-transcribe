@@ -47,9 +47,9 @@ class FinishTranscriptionHandler:
 
     @staticmethod
     def _proces_transcription_failed(
-            transcription: Transcription,
-            transcription_status: str,
-            transcription_error: str,
+        transcription: Transcription,
+        transcription_status: str,
+        transcription_error: str,
     ):
         error_message = f"Transcription ended with '{transcription_status}` status."
         if transcription_error:
@@ -69,9 +69,9 @@ class FinishTranscriptionHandler:
         for sentence in sentences:
             words = word_tokenize(sentence)
             end_word_index = (
-                    word_index
-                    + len([word for word in words if word not in string.punctuation])
-                    - 1
+                word_index
+                + len([word for word in words if word not in string.punctuation])
+                - 1
             )
             sentences_with_word_indexes.append(
                 {
@@ -88,8 +88,8 @@ class FinishTranscriptionHandler:
         for transcription_sentence in transcription_sentences:
             for transcription_text_sentence in transcription_text_sentences:
                 if (
-                        transcription_text_sentence["sentence"]
-                        != transcription_sentence["plain_text"]
+                    transcription_text_sentence["sentence"]
+                    != transcription_sentence["plain_text"]
                 ):
                     continue
                 transcription_sentence.was_present = True

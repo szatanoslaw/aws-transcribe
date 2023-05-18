@@ -3,9 +3,6 @@ from typing import Tuple, Dict
 
 import boto3
 
-import constants
-
-
 class EventBridgeHandler:
     def __init__(self):
         self.client = boto3.client("events")

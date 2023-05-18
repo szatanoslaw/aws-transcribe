@@ -22,7 +22,11 @@ class DownloadAudioFileHandler:
     def __init__(self):
         self.client = boto3.client("s3")
 
-    def run(self, request_id: str, audio_url: str, ):
+    def run(
+        self,
+        request_id: str,
+        audio_url: str,
+    ):
         s3_file_path = self._get_s3_file_path(request_id, audio_url)
         print(f"Downloading {audio_url} to {s3_file_path}")
         try:
@@ -39,7 +43,9 @@ class DownloadAudioFileHandler:
             print("File downloaded successfully, updating record")
             Transcription.get(request_id).update(
                 actions=[
-                    Transcription.status.set(constants.TranscriptionStatus.TRANSCRIBING.value),
+                    Transcription.status.set(
+                        constants.TranscriptionStatus.TRANSCRIBING.value
+                    ),
                     Transcription.audio_url.set(s3_file_path),
                 ]
             )
@@ -50,9 +56,13 @@ class DownloadAudioFileHandler:
     def _get_s3_file_path(request_id: str, audio_url: str) -> str:
         audio_file_path = urlparse(audio_url).path
         audio_file_name = os.path.basename(audio_file_path)
-        return f"s3://{constants.TRANSCRIPTION_BUCKET_NAME}/{request_id}/{audio_file_name}"
+        return (
+            f"s3://{constants.TRANSCRIPTION_BUCKET_NAME}/{request_id}/{audio_file_name}"
+        )
 
     def _download_file_to_s3_bucket(self, audio_url: str, s3_file_path: str):
-        with open(s3_file_path, "wb", transport_params={"client": s3_client}) as file_out:
+        with open(
+            s3_file_path, "wb", transport_params={"client": s3_client}
+        ) as file_out:
             for line in open(audio_url, "rb"):
                 file_out.write(line)
